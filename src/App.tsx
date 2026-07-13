@@ -1,24 +1,28 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { QuotaCard, QuotaOrb } from "./components/QuotaCard";
-import { fetchSnapshots, getPreferences, listenDesktopEvents, setAlwaysOnTop, setWidgetExpanded, startDragging, updatePreferences } from "./lib/bridge";
-import { needsFastRefresh } from "./lib/format";
+import { QuotaCard } from "./components/QuotaCard";
+import { fetchLocalActivityStats, fetchSnapshots, getPreferences, listenDesktopEvents, setAlwaysOnTop, setWidgetExpanded, startDragging, updatePreferences } from "./lib/bridge";
+import { displayedQuotaWindow, needsFastRefresh } from "./lib/format";
 import { copy, nextLanguage, normalizeLanguage } from "./lib/i18n";
 import { mergeSnapshots } from "./lib/snapshots";
-import type { ProviderSnapshot, WidgetPreferences } from "./types";
+import type { LocalActivityStats, ProviderSnapshot, WidgetPreferences } from "./types";
 
-const DEFAULT_PREFS: WidgetPreferences = { locked: false, alwaysOnTop: true, pinnedProvider: null, autoRotateSeconds: 12, language: "zh-CN" };
+const DEFAULT_PREFS: WidgetPreferences = { locked: false, alwaysOnTop: true, pinnedProvider: null, autoRotateSeconds: 12, language: "zh-CN", localActivityStats: true, weeklyOnly: true, showPercentageDecimals: true };
+const EMPTY_LOCAL_ACTIVITY: LocalActivityStats = { enabled: false, available: false, isActive: false, activeSince: null, todayNewTokens: 0, contextPercent: null, updatedAt: new Date(0).toISOString() };
 
 export default function App() {
   const [snapshots, setSnapshots] = useState<ProviderSnapshot[]>([]);
   const [preferences, setPreferences] = useState(DEFAULT_PREFS);
   const [activeIndex, setActiveIndex] = useState(0);
   const [hovered, setHovered] = useState(false);
-  const [compact, setCompact] = useState(() => window.innerWidth <= 120 || window.innerHeight <= 120);
+  const [expanded, setExpanded] = useState(false);
   const [consumingProviders, setConsumingProviders] = useState<Set<string>>(() => new Set());
   const [operationError, setOperationError] = useState<string | null>(null);
+  const [localActivity, setLocalActivity] = useState<LocalActivityStats>(EMPTY_LOCAL_ACTIVITY);
   const failures = useRef(0);
   const previousPrimary = useRef(new Map<string, number>());
   const consumptionTimers = useRef(new Map<string, number>());
+  const hoverTransition = useRef(0);
+  const resizeTransition = useRef(false);
   const language = normalizeLanguage(preferences.language);
   const t = copy[language];
 
@@ -29,7 +33,7 @@ export default function App() {
       if (hasFailure) failures.current += 1;
       else failures.current = 0;
       for (const item of values) {
-        const nextPrimary = item.shortWindow?.remainingPercent;
+        const nextPrimary = displayedQuotaWindow(item)?.remainingPercent;
         const previous = previousPrimary.current.get(item.provider);
         if (nextPrimary !== undefined && previous !== undefined && nextPrimary < previous) {
           setConsumingProviders((current) => new Set(current).add(item.provider));
@@ -59,10 +63,35 @@ export default function App() {
   }, [refresh]);
 
   useEffect(() => {
-    const updateCompact = () => setCompact(window.innerWidth <= 120 || window.innerHeight <= 120);
-    updateCompact();
-    window.addEventListener("resize", updateCompact);
-    return () => window.removeEventListener("resize", updateCompact);
+    let cancelled = false;
+    const poll = () => {
+      void fetchLocalActivityStats().then((value) => {
+        if (!cancelled) setLocalActivity(value);
+      }).catch(() => {
+        if (!cancelled) setLocalActivity(EMPTY_LOCAL_ACTIVITY);
+      });
+    };
+    poll();
+    const id = window.setInterval(poll, 1500);
+    return () => { cancelled = true; window.clearInterval(id); };
+  }, [preferences.localActivityStats]);
+
+  useEffect(() => {
+    const syncExpandedToWindow = () => {
+      if (resizeTransition.current) return;
+      setExpanded(window.innerWidth > 120 && window.innerHeight > 120);
+    };
+    window.addEventListener("resize", syncExpandedToWindow);
+    const startupTransition = hoverTransition.current;
+    resizeTransition.current = true;
+    void setWidgetExpanded(false).then(() => {
+      if (hoverTransition.current !== startupTransition) return;
+      resizeTransition.current = false;
+      setExpanded(false);
+    }).catch(() => {
+      if (hoverTransition.current === startupTransition) resizeTransition.current = false;
+    });
+    return () => window.removeEventListener("resize", syncExpandedToWindow);
   }, []);
 
   useEffect(() => {
@@ -113,17 +142,25 @@ export default function App() {
   }, [preferences]);
 
   const handleHover = useCallback((value: boolean) => {
+    const transition = ++hoverTransition.current;
+    resizeTransition.current = true;
     setHovered(value);
-    setCompact(!value);
+    setExpanded(value);
+    setOperationError(null);
     if (value) void refresh(true);
-    void setWidgetExpanded(value).catch(() => setOperationError(value ? "Widget expand failed." : "Widget collapse failed."));
+    void setWidgetExpanded(value).then(() => {
+      if (transition !== hoverTransition.current) return;
+      resizeTransition.current = false;
+      setOperationError(null);
+    }).catch(() => {
+      if (transition !== hoverTransition.current) return;
+      resizeTransition.current = false;
+      setExpanded(!value);
+      setOperationError(value ? "Widget expand failed." : "Widget collapse failed.");
+    });
   }, [refresh]);
 
   if (!current) return <div className="loading-card" aria-label={t.loadingQuota}><span /><span /><span /></div>;
-
-  if (compact) {
-    return <QuotaOrb snapshot={current} language={language} onDrag={() => startDragging()} onHover={handleHover} />;
-  }
 
   return (
     <QuotaCard
@@ -140,6 +177,8 @@ export default function App() {
       onRefresh={() => refresh(true)}
       isConsuming={consumingProviders.has(current.provider)}
       notice={operationError}
+      expanded={expanded}
+      localActivity={localActivity}
     />
   );
 }

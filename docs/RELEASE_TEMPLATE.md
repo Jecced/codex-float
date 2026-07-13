@@ -1,11 +1,11 @@
-# Quota Float 0.1.0
+# Codex Float 0.1.0
 
-Quota Float is a lightweight floating desktop widget for checking Codex quota from the local Codex Desktop login state.
+Codex Float is a lightweight floating desktop widget for checking Codex quota from the local Codex Desktop login state.
 
 ## Downloads
 
-- Windows unsigned: `quota-float-windows-unsigned.zip`
-- macOS Universal unsigned: `quota-float-macos-universal-unsigned.zip`
+- Windows unsigned: `codex-float-windows-unsigned.zip`
+- macOS Universal unsigned: `codex-float-macos-universal-unsigned.zip`
 
 ## Install
 
@@ -23,7 +23,7 @@ This macOS build is unsigned and not notarized. If macOS blocks the first launch
 
 ## Privacy
 
-Quota Float does not store Codex tokens, account IDs, prompts, chats, raw quota responses, or local auth paths. It stores only widget preferences. See `PRIVACY.md`.
+Codex Float does not store Codex tokens, account IDs, prompts, chats, raw quota responses, or local auth paths. It stores only widget preferences. See `PRIVACY.md`.
 
 ## Notes
 

@@ -1,8 +1,8 @@
-# Quota Float
+# Codex Float
 
 Lightweight floating desktop widget for checking Codex quota from the local Codex Desktop login state.
 
-![Quota Float quota states](docs/images/quota-states.png)
+![Codex Float quota states](docs/images/quota-states.png)
 
 ## Highlights
 
@@ -10,6 +10,7 @@ Lightweight floating desktop widget for checking Codex quota from the local Code
 - Uses clear quota states for healthy, caution, and critical remaining usage.
 - Collapses into a small floating orb when idle, then expands on hover.
 - Indicates whether quota is currently being consumed.
+- Detects local Codex task activity and can show today's non-cached token work plus recent context usage.
 - Includes quick controls for language switching and always-on-top behavior.
 - Shows reset credit count and available reset-credit expiration times when the quota service provides them.
 - Handles stale data, signed-out sessions, unavailable quota responses, and loading states without fabricating values.
@@ -36,7 +37,9 @@ codex, quota, tauri, react, rust, desktop-app, windows, macos, productivity
 
 ## How It Works
 
-Quota Float reads the existing Codex Desktop login state on your machine and queries Codex/ChatGPT quota endpoints with that session. It does not estimate usage from local token counts and does not redeem reset credits or modify account settings.
+Codex Float reads the existing Codex Desktop login state on your machine and queries Codex/ChatGPT quota endpoints with that session. It does not estimate usage from local token counts and does not redeem reset credits or modify account settings.
+
+When the tray option **Local activity stats / 本地活动统计** is enabled, Codex Float also reads only task lifecycle and token-count events from recent local Codex session files. This powers the real-time working indicator, today's local token count, and context percentage. These local statistics are not sent anywhere and are not used to estimate account quota.
 
 Browser preview uses mock data. Real quota reading requires the Tauri desktop app and an existing Codex Desktop login on the same machine.
 
@@ -44,9 +47,9 @@ Browser preview uses mock data. Real quota reading requires the Tauri desktop ap
 
 For normal users, download the latest unsigned build from GitHub Releases:
 
-- Latest release: https://github.com/change-42-yhmm/quota-float/releases/latest
-- Windows: `quota-float-windows-unsigned.zip`
-- macOS Universal: `quota-float-macos-universal-unsigned.zip`
+- Latest release: https://github.com/change-42-yhmm/codex-float/releases/latest
+- Windows: `codex-float-windows-unsigned.zip`
+- macOS Universal: `codex-float-macos-universal-unsigned.zip`
 
 Unzip it and run the app. Unsigned builds may trigger Windows SmartScreen or macOS Gatekeeper warnings. Public distribution to non-technical users should use signed Windows builds and notarized macOS builds.
 
@@ -54,16 +57,17 @@ Unzip it and run the app. Unsigned builds may trigger Windows SmartScreen or mac
 
 Please use GitHub Issues for bugs, compatibility reports, and feature requests:
 
-https://github.com/change-42-yhmm/quota-float/issues
+https://github.com/change-42-yhmm/codex-float/issues
 
 ## Privacy Boundary
 
-Quota Float is local-first and intentionally narrow:
+Codex Float is local-first and intentionally narrow:
 
 - Reads the local Codex Desktop login state only to query Codex quota.
 - Sends the existing Codex access token only to ChatGPT quota endpoints.
 - Stores only widget preferences in its own app config directory.
-- Does not store Codex tokens, account IDs, prompts, chat history, raw quota responses, or local auth paths.
+- Keeps local activity totals in memory only and lets users disable local activity reading from the tray menu.
+- Does not store Codex tokens, account IDs, prompts, chat history, session contents, raw quota responses, or local auth paths.
 - Does not include telemetry, analytics, crash reporting, or third-party tracking.
 - Does not redeem reset credits or modify account settings.
 
@@ -98,7 +102,7 @@ npm run tauri build
 On Windows, Tauri may download WiX to create an MSI installer. If WiX download fails, the release executable may still be produced at:
 
 ```text
-src-tauri/target/release/quota-float.exe
+src-tauri/target/release/codex-float.exe
 ```
 
 ## Release

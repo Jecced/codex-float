@@ -1,4 +1,5 @@
 mod codex;
+mod local_activity;
 mod models;
 
 use std::{
@@ -9,6 +10,7 @@ use std::{
     time::{Duration, Instant},
 };
 
+use local_activity::{LocalActivityStats, LocalActivityTracker};
 use models::{ProviderSnapshot, WidgetPreferences};
 use tauri::{
     menu::{CheckMenuItem, Menu, MenuItem},
@@ -24,6 +26,7 @@ struct AppState {
     preferences_path: PathBuf,
     fetch_lock: tokio::sync::Mutex<()>,
     snapshot_cache: Mutex<Option<(Instant, Vec<ProviderSnapshot>)>>,
+    local_activity: Mutex<LocalActivityTracker>,
 }
 
 async fn fetch_snapshots_uncached(state: &State<'_, AppState>) -> Vec<ProviderSnapshot> {
@@ -129,6 +132,23 @@ fn get_preferences(state: State<'_, AppState>) -> Result<WidgetPreferences, Stri
 }
 
 #[tauri::command]
+fn get_local_activity_stats(state: State<'_, AppState>) -> Result<LocalActivityStats, String> {
+    let enabled = state
+        .preferences
+        .lock()
+        .map_err(|_| "settings unavailable".to_string())?
+        .local_activity_stats;
+    if !enabled {
+        return Ok(LocalActivityStats::disabled());
+    }
+    state
+        .local_activity
+        .lock()
+        .map(|mut tracker| tracker.refresh())
+        .map_err(|_| "local activity unavailable".to_string())
+}
+
+#[tauri::command]
 fn set_preferences(
     preferences: WidgetPreferences,
     state: State<'_, AppState>,
@@ -220,15 +240,54 @@ fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
         autostart_enabled,
         None::<&str>,
     )?;
+    let local_activity_enabled = app
+        .state::<AppState>()
+        .preferences
+        .lock()
+        .map(|value| value.local_activity_stats)
+        .unwrap_or(true);
+    let local_activity = CheckMenuItem::with_id(
+        app,
+        "local_activity",
+        "Local activity stats / 本地活动统计",
+        true,
+        local_activity_enabled,
+        None::<&str>,
+    )?;
+    let display_preferences = app
+        .state::<AppState>()
+        .preferences
+        .lock()
+        .map(|value| value.clone())
+        .unwrap_or_default();
+    let weekly_only = CheckMenuItem::with_id(
+        app,
+        "weekly_only",
+        "Weekly quota only / 仅显示周额度",
+        true,
+        display_preferences.weekly_only,
+        None::<&str>,
+    )?;
+    let percentage_decimals = CheckMenuItem::with_id(
+        app,
+        "percentage_decimals",
+        "Two decimal percentage / 百分比保留两位小数",
+        true,
+        display_preferences.show_percentage_decimals,
+        None::<&str>,
+    )?;
     let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&show, &refresh, &unlock, &pin, &language, &autostart, &quit])?;
+    let menu = Menu::with_items(app, &[&show, &refresh, &unlock, &pin, &language, &weekly_only, &percentage_decimals, &local_activity, &autostart, &quit])?;
     let mut builder = TrayIconBuilder::with_id("main")
         .menu(&menu)
-        .tooltip("Quota Float");
+        .tooltip("Codex Float");
     if let Some(icon) = app.default_window_icon() {
         builder = builder.icon(icon.clone());
     }
     let autostart_menu = autostart.clone();
+    let local_activity_menu = local_activity.clone();
+    let weekly_only_menu = weekly_only.clone();
+    let percentage_decimals_menu = percentage_decimals.clone();
     builder
         .on_menu_event(move |app, event| match event.id.as_ref() {
             "show" => {
@@ -297,6 +356,41 @@ fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
                     Err(_) => eprintln!("autostart update failed"),
                 }
             }
+            "local_activity" => {
+                if let Some(state) = app.try_state::<AppState>() {
+                    if let Ok(mut prefs) = state.preferences.lock() {
+                        prefs.local_activity_stats = !prefs.local_activity_stats;
+                        let normalized = prefs.clone().normalized();
+                        *prefs = normalized.clone();
+                        let _ = persist_preferences(&state.preferences_path, &normalized);
+                        let _ = local_activity_menu.set_checked(normalized.local_activity_stats);
+                        let _ = app.emit_to("widget", "preferences-changed", normalized);
+                    }
+                }
+            }
+            "weekly_only" => {
+                if let Some(state) = app.try_state::<AppState>() {
+                    if let Ok(mut prefs) = state.preferences.lock() {
+                        prefs.weekly_only = !prefs.weekly_only;
+                        let normalized = prefs.clone().normalized();
+                        *prefs = normalized.clone();
+                        let _ = persist_preferences(&state.preferences_path, &normalized);
+                        let _ = weekly_only_menu.set_checked(normalized.weekly_only);
+                        let _ = app.emit_to("widget", "preferences-changed", normalized);
+                    }
+                }
+            }
+            "percentage_decimals" => {
+                if let Some(state) = app.try_state::<AppState>() {
+                    if let Ok(mut prefs) = state.preferences.lock() {
+                        prefs.show_percentage_decimals = !prefs.show_percentage_decimals;
+                        let normalized = prefs.clone().normalized();
+                        *prefs = normalized.clone();
+                        let _ = percentage_decimals_menu.set_checked(normalized.show_percentage_decimals);
+                        let _ = app.emit_to("widget", "preferences-changed", normalized);
+                    }
+                }
+            }
             "quit" => app.exit(0),
             _ => {}
         })
@@ -320,11 +414,26 @@ pub fn run() {
         .setup(|app| {
             let data_dir = app.path().app_config_dir()?;
             let preferences_path = data_dir.join("preferences.json");
-            let preferences = load_preferences(&preferences_path);
+            let preferences = if preferences_path.exists() {
+                load_preferences(&preferences_path)
+            } else {
+                let legacy_path = data_dir
+                    .parent()
+                    .map(|parent| parent.join("app.quotafloat.desktop").join("preferences.json"));
+                let preferences = legacy_path
+                    .as_ref()
+                    .filter(|path| path.exists())
+                    .map(load_preferences)
+                    .unwrap_or_default();
+                if legacy_path.is_some_and(|path| path.exists()) {
+                    let _ = persist_preferences(&preferences_path, &preferences);
+                }
+                preferences
+            };
             let client = reqwest::Client::builder()
                 .timeout(Duration::from_secs(12))
                 .redirect(reqwest::redirect::Policy::none())
-                .user_agent("QuotaFloat/0.1")
+                .user_agent("CodexFloat/0.1")
                 .build()
                 .expect("static HTTP client configuration must be valid");
             app.manage(AppState {
@@ -333,6 +442,7 @@ pub fn run() {
                 preferences_path,
                 fetch_lock: tokio::sync::Mutex::new(()),
                 snapshot_cache: Mutex::new(None),
+                local_activity: Mutex::new(LocalActivityTracker::default()),
             });
             if setup_tray(app).is_err() {
                 eprintln!("tray setup failed; enabling taskbar fallback");
@@ -352,6 +462,7 @@ pub fn run() {
             get_snapshots,
             refresh_snapshots,
             get_preferences,
+            get_local_activity_stats,
             set_preferences,
             set_widget_locked,
             set_widget_always_on_top
@@ -376,7 +487,7 @@ pub fn run() {
             }
         })
         .build(tauri::generate_context!())
-        .expect("failed to build Quota Float");
+        .expect("failed to build Codex Float");
     app.run(|app_handle, event| {
         if matches!(event, tauri::RunEvent::Resumed) {
             let _ = app_handle.emit_to("widget", "refresh-requested", ());

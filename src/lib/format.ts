@@ -1,8 +1,15 @@
 import { copy, normalizeLanguage } from "./i18n";
-import type { Language, ProviderSnapshot } from "../types";
+import type { Language, ProviderSnapshot, UsageWindow } from "../types";
 
 export function clampPercent(value: number): number {
-  return Math.min(100, Math.max(0, Math.round(value)));
+  return Math.min(100, Math.max(0, value));
+}
+
+export function formatPercent(value: number, decimalPlaces: 0 | 2): string {
+  const factor = 10 ** decimalPlaces;
+  const scaled = clampPercent(value) * factor;
+  const corrected = scaled + Number.EPSILON * Math.abs(scaled) * 2;
+  return (Math.round(corrected) / factor).toFixed(decimalPlaces);
 }
 
 export function quotaTier(percent: number | null): "unknown" | "healthy" | "caution" | "critical" {
@@ -10,6 +17,14 @@ export function quotaTier(percent: number | null): "unknown" | "healthy" | "caut
   if (percent >= 50) return "healthy";
   if (percent >= 10) return "caution";
   return "critical";
+}
+
+export function displayedQuotaWindow(snapshot: ProviderSnapshot): UsageWindow | null {
+  return snapshot.weeklyWindow ?? snapshot.shortWindow;
+}
+
+export function isWeeklyQuotaWindow(window: UsageWindow | null): boolean {
+  return window !== null && Math.abs(window.windowSeconds - 604_800) <= 60;
 }
 
 export function formatResetTime(value: string | null, now = new Date(), language: Language = "zh-CN"): string {
@@ -28,8 +43,29 @@ export function formatResetTime(value: string | null, now = new Date(), language
   return t.resetInDays(days, hours % 24);
 }
 
+export function formatCompactResetTime(value: string | null, now = new Date(), language: Language = "zh-CN"): string {
+  const isEnglish = normalizeLanguage(language) === "en";
+  if (!value) return isEnglish ? "Unknown" : "未知";
+  const target = new Date(value);
+  if (Number.isNaN(target.getTime())) return isEnglish ? "Unknown" : "未知";
+  const delta = target.getTime() - now.getTime();
+  if (delta <= 0) return isEnglish ? "Updating" : "更新中";
+  const minutes = Math.ceil(delta / 60_000);
+  if (minutes < 60) return isEnglish ? `${minutes}m` : `${minutes}分`;
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  if (hours < 24) {
+    if (isEnglish) return rest ? `${hours}h ${rest}m` : `${hours}h`;
+    return rest ? `${hours}时${rest}分` : `${hours}小时`;
+  }
+  const days = Math.floor(hours / 24);
+  const remainingHours = hours % 24;
+  if (isEnglish) return remainingHours ? `${days}d ${remainingHours}h` : `${days}d`;
+  return remainingHours ? `${days}天${remainingHours}时` : `${days}天`;
+}
+
 export function needsFastRefresh(snapshot: ProviderSnapshot, now = new Date()): boolean {
-  const reset = snapshot.shortWindow?.resetsAt;
+  const reset = displayedQuotaWindow(snapshot)?.resetsAt;
   if (!reset) return false;
   const remaining = new Date(reset).getTime() - now.getTime();
   return remaining > -5 * 60_000 && remaining <= 15 * 60_000;

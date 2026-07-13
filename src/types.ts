@@ -21,10 +21,23 @@ export interface ProviderSnapshot {
   message: string | null;
 }
 
+export interface LocalActivityStats {
+  enabled: boolean;
+  available: boolean;
+  isActive: boolean;
+  activeSince: string | null;
+  todayNewTokens: number;
+  contextPercent: number | null;
+  updatedAt: string;
+}
+
 export interface WidgetPreferences {
   locked: boolean;
   alwaysOnTop: boolean;
   pinnedProvider: ProviderId | null;
   autoRotateSeconds: number;
   language: Language;
+  localActivityStats: boolean;
+  weeklyOnly: boolean;
+  showPercentageDecimals: boolean;
 }

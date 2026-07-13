@@ -2,12 +2,12 @@
 
 ## 当前发布目标
 
-Quota Float 使用同一套 React/CSS/Tauri 代码构建 Windows 和 macOS 版本。视觉效果、悬浮球、展开卡片、透明度、圆角和动画参数都应保持在共享前端代码中，避免维护 Windows/macOS 两套 UI。
+Codex Float 使用同一套 React/CSS/Tauri 代码构建 Windows 和 macOS 版本。视觉效果、悬浮球、展开卡片、透明度、圆角和动画参数都应保持在共享前端代码中，避免维护 Windows/macOS 两套 UI。
 
 当前发布默认输出 unsigned 包：
 
-- `quota-float-windows-unsigned.zip`
-- `quota-float-macos-universal-unsigned.zip`
+- `codex-float-windows-unsigned.zip`
+- `codex-float-macos-universal-unsigned.zip`
 
 macOS 包使用 Universal 构建，同时支持 Apple Silicon 和 Intel Mac。
 

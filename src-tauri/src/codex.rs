@@ -229,6 +229,19 @@ fn parse_window(value: Option<&Value>) -> Option<UsageWindow> {
     })
 }
 
+fn normalize_windows(
+    mut short_window: Option<UsageWindow>,
+    mut weekly_window: Option<UsageWindow>,
+) -> (Option<UsageWindow>, Option<UsageWindow>) {
+    let primary_is_weekly = short_window
+        .as_ref()
+        .is_some_and(|window| window.window_seconds.abs_diff(604_800) <= 60);
+    if weekly_window.is_none() && primary_is_weekly {
+        weekly_window = short_window.take();
+    }
+    (short_window, weekly_window)
+}
+
 fn find_window<'a>(
     rate_limit: &'a Value,
     names: &[&str],
@@ -370,8 +383,12 @@ pub async fn fetch_snapshot(client: &reqwest::Client) -> ProviderSnapshot {
         ],
         604_800,
     ));
-    if short_window.is_none() {
-        return ProviderSnapshot::failure("unavailable", "Quota response is missing the 5h window.");
+    let (short_window, weekly_window) = normalize_windows(short_window, weekly_window);
+    if short_window.is_none() && weekly_window.is_none() {
+        return ProviderSnapshot::failure(
+            "unavailable",
+            "Quota response is missing a supported quota window.",
+        );
     }
 
     let usage_credits = usage
@@ -521,5 +538,16 @@ mod tests {
                 .unwrap();
         assert_eq!(short.remaining_percent, 51.0);
         assert_eq!(weekly.remaining_percent, 88.0);
+    }
+
+    #[test]
+    fn promotes_a_weekly_primary_window_when_no_short_window_exists() {
+        let primary = parse_window(Some(&serde_json::json!({
+            "remainingPercent": 99,
+            "windowSeconds": 604800
+        })));
+        let (short, weekly) = normalize_windows(primary, None);
+        assert!(short.is_none());
+        assert_eq!(weekly.unwrap().remaining_percent, 99.0);
     }
 }

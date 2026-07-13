@@ -50,14 +50,23 @@ pub struct WidgetPreferences {
     pub auto_rotate_seconds: u64,
     #[serde(default = "default_language")]
     pub language: String,
+    #[serde(default = "default_local_activity_stats")]
+    pub local_activity_stats: bool,
+    #[serde(default = "default_weekly_only")]
+    pub weekly_only: bool,
+    #[serde(default = "default_show_percentage_decimals")]
+    pub show_percentage_decimals: bool,
 }
 
 fn default_always_on_top() -> bool { true }
 fn default_language() -> String { "zh-CN".into() }
+fn default_local_activity_stats() -> bool { true }
+fn default_weekly_only() -> bool { true }
+fn default_show_percentage_decimals() -> bool { true }
 
 impl Default for WidgetPreferences {
     fn default() -> Self {
-        Self { locked: false, always_on_top: true, pinned_provider: None, auto_rotate_seconds: 12, language: default_language() }
+        Self { locked: false, always_on_top: true, pinned_provider: None, auto_rotate_seconds: 12, language: default_language(), local_activity_stats: default_local_activity_stats(), weekly_only: default_weekly_only(), show_percentage_decimals: default_show_percentage_decimals() }
     }
 }
 
@@ -71,5 +80,26 @@ impl WidgetPreferences {
             self.language = default_language();
         }
         self
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn enables_new_display_preferences_for_existing_settings() {
+        let preferences: WidgetPreferences = serde_json::from_value(serde_json::json!({
+            "locked": false,
+            "alwaysOnTop": true,
+            "pinnedProvider": null,
+            "autoRotateSeconds": 12,
+            "language": "zh-CN",
+            "localActivityStats": true
+        }))
+        .unwrap();
+
+        assert!(preferences.weekly_only);
+        assert!(preferences.show_percentage_decimals);
     }
 }
