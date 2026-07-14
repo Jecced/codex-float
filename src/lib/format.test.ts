@@ -23,16 +23,24 @@ describe("quota formatting", () => {
   });
 
   it("formats reset time in Chinese by default and supports English", () => {
-    const now = new Date("2026-07-07T00:00:00Z");
-    expect(formatResetTime("2026-07-07T01:30:00Z", now)).toBe("1 小时 30 分钟后重置");
-    expect(formatResetTime("2026-07-07T01:30:00Z", now, "zh-CN")).toBe("1 小时 30 分钟后重置");
-    expect(formatResetTime("2026-07-07T01:30:00Z", now, "en")).toBe("resets in 1h 30m");
-    expect(formatResetTime("2026-07-06T01:00:00Z", now)).toBe("正在更新额度");
-    expect(formatResetTime("2026-07-06T01:00:00Z", now, "zh-CN")).toBe("正在更新额度");
-    expect(formatResetTime("2026-07-06T01:00:00Z", now, "en")).toBe("Updating quota");
+    const now = new Date(2026, 6, 7, 0, 0);
+    const target = new Date(2026, 6, 7, 1, 30).toISOString();
+    const expired = new Date(2026, 6, 6, 1, 0).toISOString();
+    expect(formatResetTime(target, now)).toBe("1 小时 30 分钟后重置 · 7月7日 01:30");
+    expect(formatResetTime(target, now, "zh-CN")).toBe("1 小时 30 分钟后重置 · 7月7日 01:30");
+    expect(formatResetTime(target, now, "en")).toBe("resets in 1h 30m · Jul 7, 01:30 AM");
+    expect(formatResetTime(expired, now)).toBe("正在更新额度");
+    expect(formatResetTime(expired, now, "zh-CN")).toBe("正在更新额度");
+    expect(formatResetTime(expired, now, "en")).toBe("Updating quota");
     expect(formatResetTime("invalid", now)).toBe("重置时间未知");
     expect(formatResetTime("invalid", now, "zh-CN")).toBe("重置时间未知");
     expect(formatResetTime("invalid", now, "en")).toBe("Reset time unknown");
+  });
+
+  it("shows the exact local reset date after a multi-day countdown", () => {
+    const now = new Date(2026, 6, 7, 0, 0);
+    const target = new Date(2026, 6, 12, 7, 0).toISOString();
+    expect(formatResetTime(target, now)).toBe("5 天 7 小时后重置 · 7月12日 07:00");
   });
 
   it("uses a compact reset time in the collapsed widget", () => {

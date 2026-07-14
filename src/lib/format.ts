@@ -35,12 +35,23 @@ export function formatResetTime(value: string | null, now = new Date(), language
   const delta = target.getTime() - now.getTime();
   if (delta <= 0) return t.resetUpdating;
   const minutes = Math.ceil(delta / 60_000);
-  if (minutes < 60) return t.resetInMinutes(minutes);
-  const hours = Math.floor(minutes / 60);
-  const rest = minutes % 60;
-  if (hours < 24) return t.resetInHours(hours, rest);
-  const days = Math.floor(hours / 24);
-  return t.resetInDays(days, hours % 24);
+  let relative: string;
+  if (minutes < 60) {
+    relative = t.resetInMinutes(minutes);
+  } else {
+    const hours = Math.floor(minutes / 60);
+    const rest = minutes % 60;
+    relative = hours < 24
+      ? t.resetInHours(hours, rest)
+      : t.resetInDays(Math.floor(hours / 24), hours % 24);
+  }
+  const absolute = new Intl.DateTimeFormat(language === "en" ? "en-US" : "zh-CN", {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(target);
+  return `${relative} · ${absolute}`;
 }
 
 export function formatCompactResetTime(value: string | null, now = new Date(), language: Language = "zh-CN"): string {
