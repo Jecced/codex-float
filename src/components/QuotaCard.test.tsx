@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
-import { render } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { fireEvent, render } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 import type { ProviderSnapshot, WidgetPreferences } from "../types";
 import { QuotaCard } from "./QuotaCard";
 
@@ -57,5 +57,20 @@ describe("quota display preferences", () => {
     const { container } = render(<QuotaCard snapshot={snapshot} preferences={{ ...preferences, showPercentageDecimals: false }} {...callbacks} />);
     expect(container.querySelector(".primary-metric")?.textContent).toBe("42%");
     expect(container.querySelector(".primary-metric .quota-percent__fraction")).toBeNull();
+  });
+
+  it("expands the widget only while reset credit details are visible", () => {
+    const onCreditTipChange = vi.fn();
+    const creditSnapshot = { ...snapshot, resetCredits: 1, resetCreditExpiresAt: ["2026-07-20T00:00:00Z"] };
+    const { getByRole } = render(<QuotaCard snapshot={creditSnapshot} preferences={preferences} {...callbacks} onCreditTipChange={onCreditTipChange} />);
+    const button = getByRole("button", { name: "View" });
+
+    fireEvent.click(button);
+    expect(onCreditTipChange).toHaveBeenLastCalledWith(true);
+    expect(button.getAttribute("aria-expanded")).toBe("true");
+
+    fireEvent.click(button);
+    expect(onCreditTipChange).toHaveBeenLastCalledWith(false);
+    expect(button.getAttribute("aria-expanded")).toBe("false");
   });
 });

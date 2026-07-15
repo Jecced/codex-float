@@ -22,6 +22,7 @@ interface Props {
   initialShowCreditTip?: boolean;
   expanded?: boolean;
   localActivity?: LocalActivityStats;
+  onCreditTipChange?: (visible: boolean) => void;
 }
 
 function StatusIcon({ status, expired = false }: { status: ProviderSnapshot["status"]; expired?: boolean }) {
@@ -91,6 +92,7 @@ export const QuotaCard = memo(function QuotaCard({
   initialShowCreditTip = false,
   expanded = true,
   localActivity,
+  onCreditTipChange,
 }: Props) {
   const [showCreditTip, setShowCreditTip] = useState(initialShowCreditTip);
   const language = normalizeLanguage(preferences.language);
@@ -134,6 +136,19 @@ export const QuotaCard = memo(function QuotaCard({
   const creditExpirations = useMemo(() => (snapshot.resetCreditExpiresAt ?? []).map((value, index) => {
     return t.creditItem(index, formatDateTime(value, language));
   }), [language, snapshot.resetCreditExpiresAt, t]);
+
+  useEffect(() => {
+    if (!expanded && showCreditTip) {
+      setShowCreditTip(false);
+      onCreditTipChange?.(false);
+    }
+  }, [expanded, onCreditTipChange, showCreditTip]);
+
+  const toggleCreditTip = () => {
+    const visible = !showCreditTip;
+    setShowCreditTip(visible);
+    onCreditTipChange?.(visible);
+  };
 
   return (
     <main
@@ -202,7 +217,7 @@ export const QuotaCard = memo(function QuotaCard({
               <div className="reset-credit-row" onMouseDown={(event) => event.stopPropagation()}>
                 <span>{snapshot.resetCredits === null ? t.resetCreditUnknown : t.resetCredits(snapshot.resetCredits)}</span>
                 {snapshot.resetCredits !== null && snapshot.resetCredits > 0 ? (
-                  <button type="button" className="reset-credit-button" onClick={() => setShowCreditTip((value) => !value)} aria-expanded={showCreditTip} aria-label={t.view}>{t.view}</button>
+                  <button type="button" className="reset-credit-button" onClick={toggleCreditTip} aria-expanded={showCreditTip} aria-label={t.view}>{t.view}</button>
                 ) : null}
               </div>
               {showCreditTip ? (

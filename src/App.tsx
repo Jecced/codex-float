@@ -160,6 +160,14 @@ export default function App() {
     });
   }, [refresh]);
 
+  const handleCreditTipChange = useCallback((visible: boolean) => {
+    if (!expanded) return;
+    setOperationError(null);
+    void setWidgetExpanded(true, visible).catch(() => {
+      setOperationError(visible ? "Credit details could not be expanded." : "Widget could not be compacted.");
+    });
+  }, [expanded]);
+
   if (!current) return <div className="loading-card" aria-label={t.loadingQuota}><span /><span /><span /></div>;
 
   return (
@@ -179,6 +187,7 @@ export default function App() {
       notice={operationError}
       expanded={expanded}
       localActivity={localActivity}
+      onCreditTipChange={handleCreditTipChange}
     />
   );
 }

@@ -4,6 +4,9 @@ const defaultPreferences: WidgetPreferences = { locked: false, alwaysOnTop: true
 let widgetResizeAnimation = 0;
 
 const WIDGET_ANIMATION_MS = 300;
+const COLLAPSED_WIDGET_SIZE = { width: 100, height: 100 };
+const EXPANDED_WIDGET_SIZE = { width: 320, height: 250 };
+const DETAIL_WIDGET_SIZE = { width: 320, height: 320 };
 
 // Matches CSS cubic-bezier(.22, 1, .36, 1) so the web content and native
 // window settle on the same frame instead of visibly drifting apart.
@@ -100,21 +103,23 @@ export async function startDragging(): Promise<void> {
   await getCurrentWindow().startDragging();
 }
 
-export async function setWidgetExpanded(expanded: boolean): Promise<void> {
+export async function setWidgetExpanded(expanded: boolean, showDetails = false): Promise<void> {
   const animation = ++widgetResizeAnimation;
   if (!isTauri()) return;
   const { getCurrentWindow, LogicalSize } = await import("@tauri-apps/api/window");
   const appWindow = getCurrentWindow();
-  const targetSize = expanded ? 320 : 100;
-  const startWidth = window.innerWidth || targetSize;
-  const startHeight = window.innerHeight || targetSize;
+  const targetSize = expanded
+    ? showDetails ? DETAIL_WIDGET_SIZE : EXPANDED_WIDGET_SIZE
+    : COLLAPSED_WIDGET_SIZE;
+  const startWidth = window.innerWidth || targetSize.width;
+  const startHeight = window.innerHeight || targetSize.height;
   const duration = WIDGET_ANIMATION_MS;
 
   const applyFrame = (width: number, height: number) => appWindow.setSize(new LogicalSize(width, height));
 
   if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
     if (animation === widgetResizeAnimation) {
-      await applyFrame(targetSize, targetSize);
+      await applyFrame(targetSize.width, targetSize.height);
     }
     return;
   }
@@ -160,8 +165,8 @@ export async function setWidgetExpanded(expanded: boolean): Promise<void> {
 
       const progress = Math.min(1, (now - startedAt) / duration);
       const eased = widgetEase(progress);
-      const width = startWidth + (targetSize - startWidth) * eased;
-      const height = startHeight + (targetSize - startHeight) * eased;
+      const width = startWidth + (targetSize.width - startWidth) * eased;
+      const height = startHeight + (targetSize.height - startHeight) * eased;
       const finalFrame = progress >= 1;
 
       // Keep requestAnimationFrame independent from IPC latency, while
